@@ -1,0 +1,5 @@
+-f ../../../prebuilt
+
+bosdyn-client >= 2.2
+bosdyn-mission >= 2.2
+windows-curses==2.1.0; sys_platform == 'win32'
