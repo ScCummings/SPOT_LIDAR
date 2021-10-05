@@ -96,12 +96,16 @@ class MissionInterface:
     def run_mission(self):
         with LeaseKeepAlive(self._lease_client):
             # Start
+            LOGGER.info("Initializing robot...")
             self._estop_alive()
             self._power_on()
+            self._countdown(5)
             
             # Load input graph
+            LOGGER.info("Loading input graph...")
             self._upload_graph()
             self._upload_mission()
+            self._countdown(5)
             
             LOGGER.info("Commanding robot to stand...")
             self._self_right()
@@ -111,42 +115,37 @@ class MissionInterface:
             self._stand()
             self._countdown(5)
             LOGGER.info("Robot standing...")
-            
-            # This clears the graph!!
-            self._graph_nav_client.clear_graph()
+
+            LOGGER.info("Localizing...")
+            self._localize()
         
             # Start recording
+            LOGGER.info("Starting to record...")
+            self._graph_nav_client.clear_graph() # This clears the graph!!
             self._start_recording()
+            self._countdown(5)
             
-            # # Localize robot
-            # localization_error = False
-            # if do_localization:
-            #     graph = graph_nav_client.download_graph()
-            #     robot.logger.info('Localizing robot...')
-            #     robot_state = robot_state_client.get_robot_state()
-            #     localization = nav_pb2.Localization()
-
-            #     # Attempt to localize using any visible fiducial
-            #     graph_nav_client.set_localization(
-            #         initial_guess_localization=localization, ko_tform_body=None, max_distance=None,
-            #         max_yaw=None,
-            #         fiducial_init=graph_nav_pb2.SetLocalizationRequest.FIDUCIAL_INIT_NEAREST)
-            
-            # # Do mission
-            # if not localization_error:
-            #     self._run_mission(robot, mission_client, lease_client, fail_on_question, args.timeout)
-                
-            # Wait till mission is done?
+            # Replay mission
+            LOGGER.info("Replaying mission...")
+            self._replay_mission()
+            self._countdown(5)
             
             # Stop recording
+            LOGGER.info("Stopping recording...")
             self._stop_recording()
+            self._countdown(5)
             
+            LOGGER.info("Commanding robot to sit down...")
             self._sit()
+            self._countdown(5)
             
+            LOGGER.info("Downloading output...")
             # Download output graph
             self._download_output()
+            self._countdown(5)
             
             # Stop
+            LOGGER.info("Stopping robot...")
             self._safe_power_off()
             self._estop_kill()
             self.shutdown()
@@ -327,9 +326,46 @@ class MissionInterface:
         return True
         
     def _replay_mission(self):
-        pass
-    
+        '''Run mission once'''
+
+        LOGGER.info('Running mission')
+
+        mission_state = self._mission_client.get_state()
+        mission_timeout = 30.0
+
+        while mission_state.status in (mission_pb2.State.STATUS_NONE, mission_pb2.State.STATUS_RUNNING):
+            # We optionally fail if any questions are triggered. This often indicates a problem in
+            # Autowalk missions.
+            if mission_state.questions and fail_on_question:
+                LOGGER.info('Mission failed by triggering operator question.')
+                return False
+
+            self._lease = self._lease_client.lease_wallet.advance()
+            local_pause_time = time.time() + mission_timeout
+
+            self._mission_client.play_mission(local_pause_time, [self._lease])
+            time.sleep(1)
+
+            mission_state = self._mission_client.get_state()
+
+        LOGGER.info('Mission status = ' + mission_state.Status.Name(mission_state.status))
+
+        return mission_state.status in (mission_pb2.State.STATUS_SUCCESS,
+                                        mission_pb2.State.STATUS_PAUSED)
+        
     # HELPERS
+    
+    def _localize(self):
+        graph = self._graph_nav_client.download_graph()
+        LOGGER.info('Localizing robot...')
+        robot_state = self._robot_state_client.get_robot_state()
+        localization = nav_pb2.Localization()
+
+        # Attempt to localize using any visible fiducial
+        self._graph_nav_client.set_localization(
+            initial_guess_localization=localization, ko_tform_body=None, max_distance=None,
+            max_yaw=None,
+            fiducial_init=graph_nav_pb2.SetLocalizationRequest.FIDUCIAL_INIT_NEAREST)    
     
     def _try_grpc(self, desc, thunk):
         try:
@@ -513,7 +549,7 @@ def parse_arguments(argv):
     
     # Can add more command line arguments here
     parser.add_argument("--output", help="Output directory for graph map and mission file.")
-    parser.add_argument('--input', help='Input path to map directory'
+    parser.add_argument('--input', help='Input path to map directory')
     parser.add_argument('--mission', dest='mission_file', help='Optional path to mission file, defaults to autogenerated one inside input directory')
     
     return parser.parse_args(argv)
@@ -540,8 +576,8 @@ def setup_logging(is_verbose):
 
 def init_robot(hostname, username, password):
     sdk = bosdyn.client.create_standard_sdk("LIDARMissionClient")
-    robot = sdk.create_robot(config.hostname)
-    robot.authenticate(config.username, config.password)
+    robot = sdk.create_robot(hostname)
+    robot.authenticate(username, password)
     robot.time_sync.wait_for_sync()
     return robot
 
