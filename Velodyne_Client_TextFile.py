@@ -136,6 +136,8 @@ def main(argv):
     aggregate_data = collections.deque(maxlen=5)
     while True:
         if _point_cloud_task.proto[0].point_cloud:
+            # Note this method converts string to 1D array, so writing the string might
+            # be more helpful here
             data = np.fromstring(_point_cloud_task.proto[0].point_cloud.data, dtype=np.float32)
             aggregate_data.append(data)
             plot_data = np.concatenate(aggregate_data)
@@ -157,9 +159,15 @@ def main(argv):
                 #ax.plot([odom_tform_butt.x, odom_tform_head.x], [odom_tform_butt.y,odom_tform_head.y],zs=[odom_tform_butt.z,odom_tform_head.z], linewidth=6, color=SPOT_YELLOW)
             
             # We also want to append the data to a text file: 
+            # Keep in mind we have no idea what file format this will be
             lidarData = open('LidarData.txt','a')
             print("Debug so we see: ", data)
             lidarData.write(data)
+
+            # Trying a different data (should be a string?) just in case
+            lidarData2 = open("LidarData2.txt", 'a')
+            print("Debug 2 so we see: ", _point_cloud_task.proto[0].point_cloud.data)
+            lidarData2.write(_point_cloud_task.proto[0].point_cloud.data)
 
             # Plot point cloud data
             # ax.plot(plot_data[0::3], plot_data[1::3], plot_data[2::3], '.')
