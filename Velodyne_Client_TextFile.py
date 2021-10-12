@@ -99,6 +99,9 @@ def set_axes_equal(ax):
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
 def main(argv):
+
+    np.set_printoptions(threshold=sys.maxsize)
+
     # The last argument should be the IP address of the robot. The app will use the directory to find
     # the velodyne and start getting data from it.
     parser = argparse.ArgumentParser()
@@ -160,14 +163,17 @@ def main(argv):
             
             # We also want to append the data to a text file: 
             # Keep in mind we have no idea what file format this will be
-            lidarData = open('LidarData.txt','a')
-            print("Debug so we see: ", data)
-            lidarData.write(data)
+            lidarData = open('LidarData.txt','w')
+            outputData = []
+            for i in range(0, len(data), 3):
+                outputData.append([data[i], data[i+1], data[i+2]])
+                lidarData.write(str(data[i]) + " " + str(data[i+1]) + " " + str(data[i+2]) + "\n")
 
+            print("Debug so we can see: \n", outputData)
             # Trying a different data (should be a string?) just in case
-            lidarData2 = open("LidarData2.txt", 'a')
-            print("Debug 2 so we see: ", _point_cloud_task.proto[0].point_cloud.data)
-            lidarData2.write(_point_cloud_task.proto[0].point_cloud.data)
+            #lidarData2 = open("LidarData2.txt", 'ab')
+            #print("Debug 2 so we see: ", _point_cloud_task.proto[0].point_cloud.data)
+            #lidarData2.write(_point_cloud_task.proto[0].point_cloud.data)
 
             # Plot point cloud data
             # ax.plot(plot_data[0::3], plot_data[1::3], plot_data[2::3], '.')
